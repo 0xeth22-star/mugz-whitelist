@@ -333,6 +333,7 @@
           <div class="task-label">Follow @mugzoneth with 🔔 ON<small>Opens X profile</small></div>
           <span class="check-mark">✓</span>
           <button class="btn-go" onclick="doFollow()">Go</button>
+          <button class="btn-go" id="btn-followed" style="display:none;" onclick="markFollowDone()">Done ✓</button>
         </div>
         <div class="task-row" id="task-tag">
           <div class="task-label">Tag 2 Frens On This Post<small>Paste your comment link</small></div>
@@ -457,18 +458,43 @@
   function doFollow() {
     window.open('https://x.com/mugzoneth', '_blank');
     state.awaitingFollowReturn = true;
+    // Fallback for in-app browsers where visibilitychange may not fire
+    setTimeout(() => {
+      if(state.awaitingFollowReturn) {
+        document.getElementById('btn-followed').style.display = 'inline-block';
+      }
+    }, 3000);
+  }
+  function markFollowDone() {
+    state.awaitingFollowReturn = false;
+    document.getElementById('task-follow').classList.add('task-done');
+    document.getElementById('btn-followed').style.display = 'none';
+    state.followDone = true;
+    checkTasks();
   }
 
   // Tag task — open the post, then detect return
   function openTagTask() {
     window.open(postUrl, '_blank');
     state.awaitingTagReturn = true;
+    setTimeout(() => {
+      if(state.awaitingTagReturn) {
+        state.awaitingTagReturn = false;
+        document.getElementById('tag-input-wrap').style.display = 'block';
+      }
+    }, 3000);
   }
 
   // Quote task
   function openQuoteTask() {
     window.open(postUrl, '_blank');
     state.awaitingQuoteReturn = true;
+    setTimeout(() => {
+      if(state.awaitingQuoteReturn) {
+        state.awaitingQuoteReturn = false;
+        document.getElementById('quote-input-wrap').style.display = 'block';
+      }
+    }, 3000);
   }
   function submitQuote() {
     const link = document.getElementById('quote-link').value.trim();
@@ -487,6 +513,7 @@
     if(state.awaitingFollowReturn) {
       state.awaitingFollowReturn = false;
       document.getElementById('task-follow').classList.add('task-done');
+      document.getElementById('btn-followed').style.display = 'none';
       state.followDone = true;
       checkTasks();
     }
@@ -524,7 +551,7 @@
     btn.disabled = true;
 
     try {
-      await fetch('https://asesfmdbostoxteycdkn.supabase.co/rest/v1/whitelist', {
+      const res = await fetch('https://asesfmdbostoxteycdkn.supabase.co/rest/v1/whitelist', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -539,7 +566,29 @@
           quote_link: state.quoteLink
         })
       });
-    } catch(e) { console.error(e); }
+      if(!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.error('Submission failed:', res.status, errText);
+        const errEl = document.getElementById('err-wallet');
+        if(res.status === 409 || errText.includes('duplicate') || errText.includes('unique')) {
+          errEl.textContent = '⚠ Already registered';
+        } else {
+          errEl.textContent = '⚠ Submission failed – try again';
+        }
+        errEl.classList.add('show');
+        btn.textContent = 'Submit →';
+        btn.disabled = false;
+        return;
+      }
+    } catch(e) {
+      console.error(e);
+      const errEl = document.getElementById('err-wallet');
+      errEl.textContent = '⚠ Network error – try again';
+      errEl.classList.add('show');
+      btn.textContent = 'Submit →';
+      btn.disabled = false;
+      return;
+    }
 
     const h = document.getElementById('confirm-handle');
     const w = document.getElementById('confirm-wallet');
